@@ -19,6 +19,7 @@ type Repository struct {
 type Config struct {
 	Token        string
 	Organization string
+	Destination  string
 }
 
 func (c *Config) validate() error {
@@ -26,7 +27,10 @@ func (c *Config) validate() error {
 		return fmt.Errorf("token must be provided")
 	}
 	if c.Organization == "" {
-		return fmt.Errorf("organization must be provided")
+		return fmt.Errorf("orga must be provided")
+	}
+	if c.Destination == "" {
+		return fmt.Errorf("dest must be provided")
 	}
 	return nil
 }
@@ -35,6 +39,7 @@ func main() {
 	config := Config{}
 	flag.StringVar(&config.Token, "token", "", "Your GitHub token")
 	flag.StringVar(&config.Organization, "orga", "", "Name of the GitHub organization")
+	flag.StringVar(&config.Destination, "dest", "", "Destination folder")
 	flag.Parse()
 	err := config.validate()
 	if err != nil {
@@ -57,7 +62,7 @@ func main() {
 
 	fmt.Println("Found ", len(repos), " repositories. Updating now...")
 	for _, repo := range repos {
-		updateRepo(repo, "foo")
+		updateRepo(repo, config.Destination)
 	}
 }
 
@@ -104,7 +109,7 @@ func getAllRepos(client *github.Client, ctx context.Context, organization string
 		}
 		result = append(result, repos...)
 		nextPage := resp.NextPage
-		if nextPage != 0 {
+		if nextPage == 0 {
 			break
 		}
 		listByOrgOptions.ListOptions.Page = nextPage
