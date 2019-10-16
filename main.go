@@ -63,7 +63,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("Found ", len(repos), " repositories. Updating now...")
+	fmt.Println("Found", len(repos), "repositories. Updating now...")
 	for _, repo := range repos {
 		updateRepo(repo, config.Destination)
 	}
@@ -76,6 +76,7 @@ func updateRepo(repo Repository, dest string) {
 		clone(repo, pathToRepo)
 	} else {
 		fmt.Println(repo.Name, " already there, updating...")
+		pull(repo, pathToRepo)
 	}
 }
 
@@ -88,15 +89,14 @@ func clone(repo Repository, dest string) {
 }
 
 func pull(repo Repository, dest string) {
-	var cmd = exec.Command(
-		"cd", repo.Name, "&&",
-		"git", "stash", "&&",
-		"git", "pull", "&&",
-		"git", "stash", "pop", )
+	cmd := exec.Command("git", "pull", "-r", )
+	cwd, _ := os.Getwd()
+	_ = os.Chdir(dest)
 	if _, err := cmd.CombinedOutput(); err != nil {
-		fmt.Println("git pull failed for ", repo.Name)
+		fmt.Println("git pull failed for ", repo.Name, " with ", cmd.Stderr)
 		os.Exit(1)
 	}
+	_ = os.Chdir(cwd)
 }
 
 func getAllRepos(client *github.Client, ctx context.Context, organization, hostReplace string) ([]Repository, error) {
@@ -122,7 +122,6 @@ func getAllRepos(client *github.Client, ctx context.Context, organization, hostR
 		url := *repo.SSHURL
 		if hostReplace != "" {
 			url = strings.ReplaceAll(url, "github.com", hostReplace)
-			fmt.Println("URL: %s", url)
 		}
 		repos = append(repos, Repository{
 			Name: *repo.Name,

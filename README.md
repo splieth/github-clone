@@ -28,9 +28,9 @@ Host github-company
   IdentityFile ~/.ssh/some-other-key
 ```
 
-In this case- you can specifiy the ```--host``` option to make sure the ```git clone``` matches your SSH config.
+In this case you can specifiy the ```--host``` option to make sure the ```git clone``` matches your SSH config.
 
-Hence, calling ```./github-clone --token "some-token" --org "some-organization" --desination "some-folder" --host "github-company"``` with result in a URL used for cloning like this: ```git@github-company:some-organization/some-repo.git"
+Hence, calling ```./github-clone --token "some-token" --org "some-organization" --desination "some-folder" --host "github-company"``` with result in a URL used for cloning like this: ```git@github-company:some-organization/some-repo.git```.
 
 ## Contributing
 1) Fork it (https://github.com/splieth/github-clone/fork).
