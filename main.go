@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strings"
 )
 
 type Repository struct {
@@ -20,6 +21,7 @@ type Config struct {
 	Token        string
 	Organization string
 	Destination  string
+	HostReplace  string
 }
 
 func (c *Config) validate() error {
@@ -27,7 +29,7 @@ func (c *Config) validate() error {
 		return fmt.Errorf("token must be provided")
 	}
 	if c.Organization == "" {
-		return fmt.Errorf("orga must be provided")
+		return fmt.Errorf("org must be provided")
 	}
 	if c.Destination == "" {
 		return fmt.Errorf("dest must be provided")
@@ -38,8 +40,9 @@ func (c *Config) validate() error {
 func main() {
 	config := Config{}
 	flag.StringVar(&config.Token, "token", "", "Your GitHub token")
-	flag.StringVar(&config.Organization, "orga", "", "Name of the GitHub organization")
-	flag.StringVar(&config.Destination, "dest", "", "Destination folder")
+	flag.StringVar(&config.Organization, "org", "", "Name of the GitHub organization")
+	flag.StringVar(&config.Destination, "destination", "", "Destination folder")
+	flag.StringVar(&config.HostReplace, "host", "", "Replacement for github.com in SSH URL, e.g. if you use multiple SSH keys for GitHub")
 	flag.Parse()
 	err := config.validate()
 	if err != nil {
@@ -54,7 +57,7 @@ func main() {
 		oauth2.StaticTokenSource(&oauth2.Token{AccessToken: config.Token}),
 	))
 
-	repos, err := getAllRepos(client, ctx, config.Organization)
+	repos, err := getAllRepos(client, ctx, config.Organization, config.HostReplace)
 	if err != nil {
 		fmt.Printf("Error: ", err)
 		os.Exit(1)
@@ -96,7 +99,7 @@ func pull(repo Repository, dest string) {
 	}
 }
 
-func getAllRepos(client *github.Client, ctx context.Context, organization string) ([]Repository, error) {
+func getAllRepos(client *github.Client, ctx context.Context, organization, hostReplace string) ([]Repository, error) {
 	var result []*github.Repository
 
 	listByOrgOptions := &github.RepositoryListByOrgOptions{
@@ -116,9 +119,14 @@ func getAllRepos(client *github.Client, ctx context.Context, organization string
 	}
 	var repos []Repository
 	for _, repo := range result {
+		url := *repo.SSHURL
+		if hostReplace != "" {
+			url = strings.ReplaceAll(url, "github.com", hostReplace)
+			fmt.Println("URL: %s", url)
+		}
 		repos = append(repos, Repository{
 			Name: *repo.Name,
-			Url:  *repo.SSHURL,
+			Url:  url,
 		})
 	}
 	return repos, nil
