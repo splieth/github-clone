@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
+	"gopkg.in/src-d/go-git.v4"
 	"os"
-	"os/exec"
 	"path"
 	"strings"
 )
@@ -22,6 +22,16 @@ type Config struct {
 	Organization string
 	Destination  string
 	HostReplace  string
+	FailOnError  bool
+}
+
+func checkError(err error, exit bool) {
+	if err != nil {
+		fmt.Printf("\x1b[31;1m%s\x1b[0m\n", fmt.Sprintf("error: %s", err))
+		if exit {
+			os.Exit(1)
+		}
+	}
 }
 
 func (c *Config) validate() error {
@@ -34,6 +44,9 @@ func (c *Config) validate() error {
 	if c.Destination == "" {
 		return fmt.Errorf("dest must be provided")
 	}
+	if c.Destination == "" {
+		return fmt.Errorf("fail-on-error must be provided")
+	}
 	return nil
 }
 
@@ -43,13 +56,10 @@ func main() {
 	flag.StringVar(&config.Organization, "org", "", "Name of the GitHub organization")
 	flag.StringVar(&config.Destination, "destination", "", "Destination folder")
 	flag.StringVar(&config.HostReplace, "host", "", "Replacement for github.com in SSH URL, e.g. if you use multiple SSH keys for GitHub")
+	flag.BoolVar(&config.FailOnError, "fail-on-error", false, "Fail if git clone/git pull fail. Continues by default")
 	flag.Parse()
 	err := config.validate()
-	if err != nil {
-		fmt.Println(err)
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
+	checkError(err, true)
 
 	ctx := context.Background()
 	client := github.NewClient(oauth2.NewClient(
@@ -58,45 +68,45 @@ func main() {
 	))
 
 	repos, err := getAllRepos(client, ctx, config.Organization, config.HostReplace)
-	if err != nil {
-		fmt.Printf("Error: ", err)
-		os.Exit(1)
-	}
+	checkError(err, true)
 
 	fmt.Println("Found", len(repos), "repositories. Updating now...")
 	for _, repo := range repos {
-		updateRepo(repo, config.Destination)
+		updateRepo(repo, config)
 	}
 }
 
-func updateRepo(repo Repository, dest string) {
-	pathToRepo := path.Join(dest, repo.Name)
+func updateRepo(repo Repository, config Config) {
+	pathToRepo := path.Join(config.Destination, repo.Name)
 	if _, err := os.Stat(pathToRepo); os.IsNotExist(err) {
 		fmt.Println(repo.Name, " not present, cloning...")
-		clone(repo, pathToRepo)
+		clone(repo, pathToRepo, config.FailOnError)
 	} else {
 		fmt.Println(repo.Name, " already there, updating...")
-		pull(repo, pathToRepo)
+		pull(repo, pathToRepo, config.FailOnError)
 	}
 }
 
-func clone(repo Repository, dest string) {
-	var cmd = exec.Command("git", "clone", repo.Url, dest)
-	if _, err := cmd.CombinedOutput(); err != nil {
-		fmt.Println("git clone failed for ", repo.Name)
-		os.Exit(1)
-	}
+func clone(repo Repository, path string, fail bool) {
+	_, err := git.PlainClone(path, false, &git.CloneOptions{
+		URL:      repo.Url,
+		Progress: os.Stdout,
+	})
+	checkError(err, fail)
 }
 
-func pull(repo Repository, dest string) {
-	cmd := exec.Command("git", "pull", "-r", )
-	cwd, _ := os.Getwd()
-	_ = os.Chdir(dest)
-	if _, err := cmd.CombinedOutput(); err != nil {
-		fmt.Println("git pull failed for ", repo.Name, " with ", cmd.Stderr)
-		os.Exit(1)
-	}
-	_ = os.Chdir(cwd)
+func pull(repo Repository, path string, fail bool) {
+	r, err := git.PlainOpen(path)
+	checkError(err, fail)
+	w, err := r.Worktree()
+	checkError(err, fail)
+	err = w.Pull(&git.PullOptions{})
+	ref, err := r.Head()
+	checkError(err, fail)
+	commit, err := r.CommitObject(ref.Hash())
+	checkError(err, fail)
+
+	fmt.Println("Latest commit for", repo.Name, "->", strings.TrimSuffix(commit.Message, "\n"), " (by", commit.Author.Name, ")")
 }
 
 func getAllRepos(client *github.Client, ctx context.Context, organization, hostReplace string) ([]Repository, error) {
